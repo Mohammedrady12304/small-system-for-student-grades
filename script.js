@@ -1,6 +1,7 @@
 // Global variables
 let studentsData = [];
-const ADMIN_PASSWORD = "admin123"; // Change this to a secure password
+const ADMIN_PASSWORD = "112233"; // تغيير كلمة المرور الآمنة
+const API_URL = `${window.location.protocol}//${window.location.host}/api`;
 
 // Initialize application
 document.addEventListener('DOMContentLoaded', function() {
@@ -122,139 +123,30 @@ function uploadExcelFile() {
         return;
     }
 
-    // Check if XLSX is available
-    if (typeof XLSX === 'undefined') {
-        showStatus('خطأ: مكتبة Excel لم تحمّل بعد. الرجاء تحديث الصفحة والمحاولة مجددًا', 'error', statusDiv);
-        setTimeout(() => location.reload(), 2000);
-        return;
-    }
-
     const file = fileInput.files[0];
-    
-    // Support both XLSX and CSV files
-    if (file.name.endsWith('.csv')) {
-        parseCSVFile(file, statusDiv);
-    } else {
-        parseXLSXFile(file, statusDiv);
-    }
-}
+    const formData = new FormData();
+    formData.append('file', file);
 
-// Parse XLSX file
-function parseXLSXFile(file, statusDiv) {
-    const reader = new FileReader();
-
-    reader.onload = function(e) {
-        try {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: 'array' });
-            const sheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[sheetName];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet);
-
-            // Validate and parse data
-            studentsData = parseExcelData(jsonData);
-            saveStudentsData();
-            
-            showStatus('تم رفع الملف بنجاح! (' + studentsData.length + ' طالب)', 'success', statusDiv);
+    fetch(`${API_URL}/upload`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showStatus(data.message, 'success', statusDiv);
             document.getElementById('excelFile').value = '';
-            displayAdminData();
-        } catch (error) {
-            showStatus('خطأ في قراءة الملف: ' + error.message, 'error', statusDiv);
-            console.error('Error:', error);
+            loadStudentsData().then(() => {
+                displayAdminData();
+            });
+        } else {
+            showStatus('خطأ: ' + (data.error || 'فشل رفع الملف'), 'error', statusDiv);
         }
-    };
-
-    reader.onerror = function() {
-        showStatus('خطأ: تعذر قراءة الملف', 'error', statusDiv);
-    };
-
-    reader.readAsArrayBuffer(file);
-}
-
-// Parse CSV file as fallback
-function parseCSVFile(file, statusDiv) {
-    const reader = new FileReader();
-
-    reader.onload = function(e) {
-        try {
-            const csv = e.target.result;
-            const lines = csv.split('\n');
-            const headers = lines[0].split(',').map(h => h.trim());
-            
-            const jsonData = [];
-            for (let i = 1; i < lines.length; i++) {
-                if (lines[i].trim()) {
-                    const values = lines[i].split(',').map(v => v.trim());
-                    const obj = {};
-                    headers.forEach((header, index) => {
-                        obj[header] = values[index] || '';
-                    });
-                    jsonData.push(obj);
-                }
-            }
-
-            studentsData = parseExcelData(jsonData);
-            saveStudentsData();
-            
-            showStatus('تم رفع الملف بنجاح! (' + studentsData.length + ' طالب)', 'success', statusDiv);
-            document.getElementById('excelFile').value = '';
-            displayAdminData();
-        } catch (error) {
-            showStatus('خطأ في قراءة الملف: ' + error.message, 'error', statusDiv);
-        }
-    };
-
-    reader.readAsText(file);
-}
-
-// Parse Excel data
-function parseExcelData(jsonData) {
-    const parsed = [];
-    
-    for (let row of jsonData) {
-        // Find the ID column (could be 'ID', 'الرقم', 'رقم الطالب', etc.)
-        const idKey = findKey(row, ['ID', 'الرقم', 'رقم الطالب', 'Student ID', 'id','username' , 'Username','اسم المستخدم']);
-        const nameKey = findKey(row, ['الاسم', 'Name', 'name']);
-        const passwordKey = findKey(row, ['الرقم السري', 'Password', 'password', 'السر']);
-
-        if (!idKey || !nameKey || !passwordKey) {
-            continue; // Skip if required fields not found
-        }
-
-        const student = {
-            id: String(row[idKey]).trim(),
-            name: String(row[nameKey]).trim(),
-            password: String(row[passwordKey]).trim()
-        };
-
-        // Add all other columns as subjects/grades
-        for (let key in row) {
-            if (key !== idKey && key !== nameKey && key !== passwordKey && row[key] !== '' && row[key] !== null) {
-                const grade = parseFloat(row[key]);
-                if (!isNaN(grade)) {
-                    student[key] = grade;
-                }
-            }
-        }
-
-        parsed.push(student);
-    }
-
-    return parsed;
-}
-
-// Find key in object (case insensitive)
-function findKey(obj, possibleKeys) {
-    for (let key of possibleKeys) {
-        if (key in obj) return key;
-        // Try case insensitive search
-        for (let objKey in obj) {
-            if (objKey.toLowerCase() === key.toLowerCase()) {
-                return objKey;
-            }
-        }
-    }
-    return null;
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showStatus('خطأ في الاتصال: ' + error.message, 'error', statusDiv);
+    });
 }
 
 // Get all subjects
@@ -316,17 +208,18 @@ function getGradeClass(grade) {
     return 'low';
 }
 
-// Save students data to localStorage
-function saveStudentsData() {
-    localStorage.setItem('studentsData', JSON.stringify(studentsData));
-}
-
-// Load students data from localStorage
+// Load students data from backend
 function loadStudentsData() {
-    const saved = localStorage.getItem('studentsData');
-    if (saved) {
-        studentsData = JSON.parse(saved);
-    }
+    return fetch(`${API_URL}/getStudents`)
+        .then(response => response.json())
+        .then(data => {
+            studentsData = data;
+            return data;
+        })
+        .catch(error => {
+            console.error('Error loading data:', error);
+            return [];
+        });
 }
 
 // Export data as backup
@@ -336,71 +229,7 @@ function exportData() {
         return;
     }
 
-    const subjects = getSubjects();
-    const exportData = [];
-
-    for (let student of studentsData) {
-        const row = {
-            'الرقم': student.id,
-            'الاسم': student.name,
-            'الرقم السري': student.password
-        };
-
-        for (let subject of subjects) {
-            row[subject] = student[subject] || '';
-        }
-
-        exportData.push(row);
-    }
-
-    // Try to export as Excel, fallback to CSV
-    if (typeof XLSX !== 'undefined') {
-        // Create Excel file
-        const worksheet = XLSX.utils.json_to_sheet(exportData);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'الطلاب');
-        
-        // Download file
-        const date = new Date().toISOString().slice(0, 10);
-        XLSX.writeFile(workbook, `backup_students_${date}.xlsx`);
-    } else {
-        // Fallback to CSV export
-        exportAsCSV(exportData);
-    }
-}
-
-// Export data as CSV
-function exportAsCSV(data) {
-    if (!data || data.length === 0) return;
-
-    // Get headers from first object
-    const headers = Object.keys(data[0]);
-    
-    // Create CSV content
-    let csvContent = headers.join(',') + '\n';
-    
-    for (let row of data) {
-        const values = headers.map(header => {
-            const value = row[header] || '';
-            // Escape quotes and wrap in quotes if contains comma
-            return String(value).includes(',') ? `"${String(value).replace(/"/g, '""')}"` : value;
-        });
-        csvContent += values.join(',') + '\n';
-    }
-
-    // Download CSV file
-    const date = new Date().toISOString().slice(0, 10);
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    
-    link.setAttribute('href', url);
-    link.setAttribute('download', `backup_students_${date}.csv`);
-    link.style.visibility = 'hidden';
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    window.location.href = `${API_URL}/export`;
 }
 
 // Show status message
@@ -422,25 +251,28 @@ function deleteAllData() {
         return;
     }
 
-    // Show confirmation dialog
     const confirmed = confirm('⚠️ تحذير! هذا الإجراء سيحذف جميع البيانات نهائياً.\n\nهل أنت متأكد من الحذف؟');
     
     if (confirmed) {
-        // Clear data from memory
-        studentsData = [];
-        
-        // Clear data from localStorage
-        localStorage.removeItem('studentsData');
-        
-        // Clear file input
-        document.getElementById('excelFile').value = '';
-        
-        // Update UI
-        displayAdminData();
-        
-        // Show success message
-        const statusDiv = document.getElementById('uploadStatus');
-        showStatus('✓ تم حذف جميع البيانات بنجاح', 'success', statusDiv);
+        fetch(`${API_URL}/deleteAll`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                studentsData = [];
+                document.getElementById('excelFile').value = '';
+                displayAdminData();
+                const statusDiv = document.getElementById('uploadStatus');
+                showStatus('✓ تم حذف جميع البيانات بنجاح', 'success', statusDiv);
+            } else {
+                alert('خطأ: ' + (data.error || 'فشل حذف البيانات'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('خطأ في الاتصال بالسيرفر: ' + error.message);
+        });
     }
 }
 
