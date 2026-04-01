@@ -127,11 +127,34 @@ function uploadExcelFile() {
     const formData = new FormData();
     formData.append('file', file);
 
+    console.log('Starting upload to:', `${API_URL}/upload`);
+
     fetch(`${API_URL}/upload`, {
         method: 'POST',
         body: formData
     })
-    .then(response => response.json())
+    .then(response => {
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+        
+        // Check if response is actually JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            return response.text().then(text => {
+                console.error('Unexpected response type:', contentType);
+                console.error('Response body:', text.substring(0, 500));
+                throw new Error(`Expected JSON but got ${contentType}. Response: ${text.substring(0, 200)}`);
+            });
+        }
+        
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.error || `HTTP error! status: ${response.status}`);
+            });
+        }
+        
+        return response.json();
+    })
     .then(data => {
         if (data.success) {
             showStatus(data.message, 'success', statusDiv);
@@ -144,7 +167,7 @@ function uploadExcelFile() {
         }
     })
     .catch(error => {
-        console.error('Error:', error);
+        console.error('Error details:', error);
         showStatus('خطأ في الاتصال: ' + error.message, 'error', statusDiv);
     });
 }

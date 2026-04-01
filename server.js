@@ -12,9 +12,13 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
+app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
 // Multer setup for file uploads
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ 
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 50 * 1024 * 1024 }
+});
 
 // Data file path
 const DATA_FILE = path.join(__dirname, 'data', 'students.json');
@@ -140,48 +144,70 @@ app.get('/api/students/:id', (req, res) => {
 });
 
 // POST - Upload Excel/CSV file
-app.post('/api/upload', upload.single('file'), (req, res) => {
-    try {
-        if (!req.file) {
-            return res.status(400).json({ error: 'No file provided' });
+app.post('/api/upload', (req, res, next) => {
+    // Add logging
+    console.log('Upload request received:', {
+        contentType: req.headers['content-type'],
+        method: req.method,
+        path: req.path
+    });
+    
+    // Use multer middleware
+    upload.single('file')(req, res, (err) => {
+        if (err) {
+            console.error('Multer error:', err);
+            return res.status(400).json({ error: 'File upload error: ' + err.message });
         }
+        
+        try {
+            if (!req.file) {
+                return res.status(400).json({ error: 'No file provided' });
+            }
 
-        let studentsData = [];
-
-        if (req.file.originalname.endsWith('.csv')) {
-            // Parse CSV
-            const csvText = req.file.buffer.toString('utf8');
-            studentsData = parseCSVData(csvText);
-        } else {
-            // Parse Excel
-            const data = new Uint8Array(req.file.buffer);
-            const workbook = XLSX.read(data, { type: 'array' });
-            const sheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[sheetName];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet);
-            studentsData = parseExcelData(jsonData);
-        }
-
-        if (studentsData.length === 0) {
-            return res.status(400).json({ error: 'No valid data found in file' });
-        }
-
-        // Save to file
-        const success = saveStudentsData(studentsData);
-
-        if (success) {
-            res.json({
-                success: true,
-                message: `تم رفع الملف بنجاح! (${studentsData.length} طالب)`,
-                count: studentsData.length
+            console.log('File received:', {
+                originalname: req.file.originalname,
+                size: req.file.size,
+                mimetype: req.file.mimetype
             });
-        } else {
-            res.status(500).json({ error: 'Failed to save data' });
+
+            let studentsData = [];
+
+            if (req.file.originalname.endsWith('.csv')) {
+                // Parse CSV
+                const csvText = req.file.buffer.toString('utf8');
+                studentsData = parseCSVData(csvText);
+            } else {
+                // Parse Excel
+                const data = new Uint8Array(req.file.buffer);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet);
+                studentsData = parseExcelData(jsonData);
+            }
+
+            if (studentsData.length === 0) {
+                return res.status(400).json({ error: 'No valid data found in file' });
+            }
+
+            // Save to file
+            const success = saveStudentsData(studentsData);
+
+            if (success) {
+                res.setHeader('Content-Type', 'application/json');
+                res.json({
+                    success: true,
+                    message: `تم رفع الملف بنجاح! (${studentsData.length} طالب)`,
+                    count: studentsData.length
+                });
+            } else {
+                res.status(500).json({ error: 'Failed to save data' });
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            res.status(500).json({ error: 'Error processing file: ' + error.message });
         }
-    } catch (error) {
-        console.error('Error:', error);
-        res.status(500).json({ error: 'Error processing file: ' + error.message });
-    }
+    });
 });
 
 // POST - Add or update single student
@@ -308,12 +334,26 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'Server is running', timestamp: new Date().toISOString() });
 });
 
-// Serve static files (CSS, JS, images, etc.)
-app.use(express.static(path.join(__dirname)));
+// Serve static files (CSS, JS, images, etc.) - MUST come after API routes
+app.use(express.static(path.join(__dirname), { 
+    skip: (req) => req.path.startsWith('/api'),
+    setHeaders: (res, path) => {
+        // Prevent caching of index.html so api routes work properly
+        if (path.endsWith('index.html')) {
+            res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        }
+    }
+}));
 
-// Serve the frontend
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+// Serve the frontend as fallback for single page app
+app.get('*', (req, res) => {
+    // If path starts with /api, it's a 404
+    if (req.path.startsWith('/api')) {
+        res.status(404).json({ error: 'API endpoint not found' });
+    } else {
+        // Otherwise serve index.html for SPA routing
+        res.sendFile(path.join(__dirname, 'index.html'));
+    }
 });
 
 // Start server
