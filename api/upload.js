@@ -60,10 +60,12 @@ export const config = {
 
 export default async function handler(req, res) {
   // Enable CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Content-Type', 'application/json');
+
   if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     return res.status(200).end();
   }
 
@@ -71,12 +73,17 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  res.setHeader('Access-Control-Allow-Origin', '*');
-
   try {
+    // Check if Firebase is initialized
+    if (!admin.apps || admin.apps.length === 0) {
+      console.error('Firebase not initialized');
+      return res.status(500).json({ error: 'Firebase not initialized' });
+    }
+
     const bb = busboy({ headers: req.headers });
     let fileBuffer = Buffer.alloc(0);
     let fileName = '';
+    let responseSent = false;
 
     bb.on('file', (fieldname, file, info) => {
       fileName = info.filename;
@@ -86,7 +93,10 @@ export default async function handler(req, res) {
     });
 
     bb.on('close', async () => {
+      if (responseSent) return;
+      
       if (fileBuffer.length === 0) {
+        responseSent = true;
         return res.status(400).json({ error: 'No file provided' });
       }
 
@@ -120,6 +130,7 @@ export default async function handler(req, res) {
         }
 
         if (studentsData.length === 0) {
+          responseSent = true;
           return res.status(400).json({ error: 'No valid data found in file' });
         }
 
@@ -134,6 +145,7 @@ export default async function handler(req, res) {
 
         await studentsRef.set(studentsMap);
 
+        responseSent = true;
         res.status(200).json({
           success: true,
           message: `تم رفع الملف بنجاح! (${studentsData.length} طالب)`,
@@ -141,18 +153,26 @@ export default async function handler(req, res) {
         });
       } catch (error) {
         console.error('Error processing file:', error);
-        res.status(500).json({ error: 'Error processing file: ' + error.message });
+        if (!responseSent) {
+          responseSent = true;
+          res.status(500).json({ error: 'Error processing file: ' + error.message });
+        }
       }
     });
 
     bb.on('error', (error) => {
       console.error('Busboy error:', error);
-      res.status(500).json({ error: 'Error uploading file' });
+      if (!responseSent) {
+        responseSent = true;
+        res.status(500).json({ error: 'Error uploading file: ' + error.message });
+      }
     });
 
     req.pipe(bb);
   } catch (error) {
     console.error('Error:', error);
-    res.status(500).json({ error: error.message });
+    if (!responseSent) {
+      res.status(500).json({ error: error.message });
+    }
   }
 }
