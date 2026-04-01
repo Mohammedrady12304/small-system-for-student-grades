@@ -1,7 +1,9 @@
 // Global variables
 let studentsData = [];
 const ADMIN_PASSWORD = "112233"; // تغيير كلمة المرور الآمنة
-const API_URL = `${window.location.protocol}//${window.location.host}/api`;
+// API URL يعمل على Vercel
+const API_BASE_URL = window.location.origin;
+const API_URL = `${API_BASE_URL}/api`;
 
 // Initialize application
 document.addEventListener('DOMContentLoaded', function() {
@@ -233,11 +235,21 @@ function getGradeClass(grade) {
 
 // Load students data from backend
 function loadStudentsData() {
-    return fetch(`${API_URL}/getStudents`)
-        .then(response => response.json())
+    return fetch(`${API_URL}/get-students`)
+        .then(response => {
+            if (!response.ok) throw new Error('Failed to load students');
+            return response.json();
+        })
         .then(data => {
-            studentsData = data;
-            return data;
+            if (Array.isArray(data)) {
+                studentsData = data;
+            } else if (typeof data === 'object' && data !== null) {
+                // Firebase يرجع object بدلاً من array
+                studentsData = Object.values(data);
+            } else {
+                studentsData = [];
+            }
+            return studentsData;
         })
         .catch(error => {
             console.error('Error loading data:', error);
