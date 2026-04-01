@@ -1,10 +1,16 @@
-const express = require('express');
-const cors = require('cors');
-const bodyParser = require('body-parser');
-const multer = require('multer');
-const fs = require('fs');
-const path = require('path');
-const XLSX = require('xlsx');
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+import bodyParser from 'body-parser';
+import multer from 'multer';
+import path from 'path';
+import XLSX from 'xlsx';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import admin from './api/firebase-config.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -20,38 +26,36 @@ const upload = multer({
     limits: { fileSize: 50 * 1024 * 1024 }
 });
 
-// Data file path
-const DATA_FILE = path.join(__dirname, 'data', 'students.json');
-const DATA_DIR = path.join(__dirname, 'data');
+// Get Firebase Realtime Database reference
+const db = admin.database();
+const STUDENTS_REF = 'students';
 
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR);
-}
-
-// Initialize data file if it doesn't exist
-if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify([]), 'utf8');
-}
-
-// Load students data from JSON file
-function loadStudentsData() {
+// Load students data from Firebase
+async function loadStudentsData() {
     try {
-        const data = fs.readFileSync(DATA_FILE, 'utf8');
-        return JSON.parse(data);
+        const snapshot = await db.ref(STUDENTS_REF).once('value');
+        const data = snapshot.val();
+        
+        if (!data) return [];
+        
+        // If Firebase returns an object, convert to array
+        if (typeof data === 'object' && !Array.isArray(data)) {
+            return Object.values(data);
+        }
+        return data;
     } catch (error) {
-        console.error('Error loading data:', error);
+        console.error('Error loading data from Firebase:', error);
         return [];
     }
 }
 
-// Save students data to JSON file
-function saveStudentsData(data) {
+// Save students data to Firebase
+async function saveStudentsData(data) {
     try {
-        fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
+        await db.ref(STUDENTS_REF).set(data);
         return true;
     } catch (error) {
-        console.error('Error saving data:', error);
+        console.error('Error saving data to Firebase:', error);
         return false;
     }
 }
@@ -126,14 +130,14 @@ function parseCSVData(csvText) {
 // ===== API Routes =====
 
 // GET - Load all students
-app.get('/api/getStudents', (req, res) => {
-    const studentsData = loadStudentsData();
+app.get('/api/get-students', async (req, res) => {
+    const studentsData = await loadStudentsData();
     res.json(studentsData);
 });
 
 // GET - Get student by ID
-app.get('/api/students/:id', (req, res) => {
-    const studentsData = loadStudentsData();
+app.get('/api/students/:id', async (req, res) => {
+    const studentsData = await loadStudentsData();
     const student = studentsData.find(s => s.id === req.params.id);
 
     if (student) {
@@ -145,15 +149,13 @@ app.get('/api/students/:id', (req, res) => {
 
 // POST - Upload Excel/CSV file
 app.post('/api/upload', (req, res, next) => {
-    // Add logging
     console.log('Upload request received:', {
         contentType: req.headers['content-type'],
         method: req.method,
         path: req.path
     });
     
-    // Use multer middleware
-    upload.single('file')(req, res, (err) => {
+    upload.single('file')(req, res, async (err) => {
         if (err) {
             console.error('Multer error:', err);
             return res.status(400).json({ error: 'File upload error: ' + err.message });
@@ -173,11 +175,9 @@ app.post('/api/upload', (req, res, next) => {
             let studentsData = [];
 
             if (req.file.originalname.endsWith('.csv')) {
-                // Parse CSV
                 const csvText = req.file.buffer.toString('utf8');
                 studentsData = parseCSVData(csvText);
             } else {
-                // Parse Excel
                 const data = new Uint8Array(req.file.buffer);
                 const workbook = XLSX.read(data, { type: 'array' });
                 const sheetName = workbook.SheetNames[0];
@@ -190,8 +190,7 @@ app.post('/api/upload', (req, res, next) => {
                 return res.status(400).json({ error: 'No valid data found in file' });
             }
 
-            // Save to file
-            const success = saveStudentsData(studentsData);
+            const success = await saveStudentsData(studentsData);
 
             if (success) {
                 res.setHeader('Content-Type', 'application/json');
@@ -211,7 +210,7 @@ app.post('/api/upload', (req, res, next) => {
 });
 
 // POST - Add or update single student
-app.post('/api/students', (req, res) => {
+app.post('/api/students', async (req, res) => {
     try {
         const { id, name, password, ...grades } = req.body;
 
@@ -219,9 +218,8 @@ app.post('/api/students', (req, res) => {
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
-        let studentsData = loadStudentsData();
+        let studentsData = await loadStudentsData();
         
-        // Check if student exists
         const existingIndex = studentsData.findIndex(s => s.id === id);
         
         const studentData = {
@@ -232,14 +230,12 @@ app.post('/api/students', (req, res) => {
         };
 
         if (existingIndex !== -1) {
-            // Update existing student
             studentsData[existingIndex] = studentData;
         } else {
-            // Add new student
             studentsData.push(studentData);
         }
 
-        const success = saveStudentsData(studentsData);
+        const success = await saveStudentsData(studentsData);
 
         if (success) {
             res.json({
@@ -257,9 +253,9 @@ app.post('/api/students', (req, res) => {
 });
 
 // DELETE - Delete all data
-app.delete('/api/deleteAll', (req, res) => {
+app.delete('/api/deleteAll', async (req, res) => {
     try {
-        const success = saveStudentsData([]);
+        const success = await saveStudentsData([]);
 
         if (success) {
             res.json({
@@ -276,15 +272,15 @@ app.delete('/api/deleteAll', (req, res) => {
 });
 
 // DELETE - Delete specific student
-app.delete('/api/students/:id', (req, res) => {
+app.delete('/api/students/:id', async (req, res) => {
     try {
-        let studentsData = loadStudentsData();
+        let studentsData = await loadStudentsData();
         const initialLength = studentsData.length;
 
         studentsData = studentsData.filter(s => s.id !== req.params.id);
 
         if (studentsData.length < initialLength) {
-            const success = saveStudentsData(studentsData);
+            const success = await saveStudentsData(studentsData);
 
             if (success) {
                 res.json({
@@ -304,20 +300,18 @@ app.delete('/api/students/:id', (req, res) => {
 });
 
 // GET - Export data as backup
-app.get('/api/export', (req, res) => {
+app.get('/api/export', async (req, res) => {
     try {
-        const studentsData = loadStudentsData();
+        const studentsData = await loadStudentsData();
 
         if (studentsData.length === 0) {
             return res.status(400).json({ error: 'No data to export' });
         }
 
-        // Create Excel file
         const worksheet = XLSX.utils.json_to_sheet(studentsData);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, 'الطلاب');
 
-        // Send file
         const date = new Date().toISOString().slice(0, 10);
         res.setHeader('Content-Disposition', `attachment; filename="backup_students_${date}.xlsx"`);
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -334,24 +328,21 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'Server is running', timestamp: new Date().toISOString() });
 });
 
-// Serve static files (CSS, JS, images, etc.) - MUST come after API routes
+// Serve static files
 app.use(express.static(path.join(__dirname), { 
     skip: (req) => req.path.startsWith('/api'),
     setHeaders: (res, path) => {
-        // Prevent caching of index.html so api routes work properly
         if (path.endsWith('index.html')) {
             res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
         }
     }
 }));
 
-// Serve the frontend as fallback for single page app
+// Serve the frontend as fallback
 app.get('*', (req, res) => {
-    // If path starts with /api, it's a 404
     if (req.path.startsWith('/api')) {
         res.status(404).json({ error: 'API endpoint not found' });
     } else {
-        // Otherwise serve index.html for SPA routing
         res.sendFile(path.join(__dirname, 'index.html'));
     }
 });
@@ -359,5 +350,6 @@ app.get('*', (req, res) => {
 // Start server
 app.listen(PORT, () => {
     console.log(`✅ Server running on http://localhost:${PORT}`);
-    console.log(`📁 Data stored in: ${DATA_FILE}`);
+    console.log(`📁 Data stored in: Firebase Realtime Database`);
+    console.log(`🔥 Project ID: ${process.env.FIREBASE_PROJECT_ID}`);
 });

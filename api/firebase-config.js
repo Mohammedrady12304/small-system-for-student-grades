@@ -1,11 +1,17 @@
-const admin = require('firebase-admin');
+import admin from 'firebase-admin';
 
 // Initialize Firebase
 const serviceAccount = {
-  projectId: process.env.FIREBASE_PROJECT_ID,
-  privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-  clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+  project_id: process.env.FIREBASE_PROJECT_ID,
+  private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+  client_email: process.env.FIREBASE_CLIENT_EMAIL,
 };
+
+console.log('Firebase Config:', {
+  project_id: serviceAccount.project_id ? '✓' : '✗',
+  private_key: serviceAccount.private_key ? '✓' : '✗',
+  client_email: serviceAccount.client_email ? '✓' : '✗'
+});
 
 if (!admin.apps.length) {
   try {
@@ -13,9 +19,10 @@ if (!admin.apps.length) {
       credential: admin.credential.cert(serviceAccount),
       databaseURL: `https://${process.env.FIREBASE_PROJECT_ID}.firebaseio.com`
     });
+    console.log('✅ Firebase initialized successfully');
   } catch (error) {
-    console.error('Firebase initialization error:', error);
+    console.error('Firebase initialization error:', error.message);
   }
 }
 
-module.exports = admin;
+export default admin;

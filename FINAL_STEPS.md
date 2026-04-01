@@ -61,10 +61,10 @@
 5. انقر "New Project"
 6. ابحث عن "student-grades" repository واختره
 7. في الإعدادات:
-   - Framework: "Next.js" (اختر Node.js أو Other)
-   - Root Directory: ./ (افتراضي)
-   - Build Command: npm install
-   - Start Command: (اتركه فارغ للـ serverless)
+   - Framework: اختر "Other" (ليس Next.js!)
+   - Root Directory: `.` (نقطة واحدة فقط!)
+   - Build Command: (اتركه **فارغاً تماماً**)
+   - Start Command: (فارغ أيضاً - serverless)
 
 8. اضغط "Environment Variables"
 9. أضف هذه المتغيرات من ملف JSON السابق:
@@ -195,6 +195,16 @@ vercel dev
 ---
 
 ## ❓ إذا حدثت مشاكل
+
+### "enoent Could not read package.json"
+✅ **الحل:**
+```
+في Vercel:
+1. اذهب إلى Settings > General
+2. غيّر Root Directory إلى: . (نقطة واحدة)
+3. Build Command: اتركه فارغاً تماماً
+4. انقر Redeploy
+```
 
 ### "API returns 500 error"
 - تحقق من Vercel Logs
