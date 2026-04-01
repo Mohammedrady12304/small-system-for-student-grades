@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام استخراج درجات الطلاب</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- تسجيل الدخول للطالب -->
+    <div id="loginContainer" class="container active">
+        <div class="card login-card">
+            <h1 id="headerTitle">سجل الدخول لمعرفة درجتك</h1>
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('student')">دخول الطالب</button>
+                <button class="tab-btn" onclick="switchTab('admin')">دخول المسؤول</button>
+            </div>
+
+            <!-- طالب تسجيل -->
+            <div id="studentTab" class="tab-content active">
+                <form onsubmit="studentLogin(event)">
+                    <div class="form-group">
+                        <label for="studentId">رقم الطالب:</label>
+                        <input type="text" id="studentId" required placeholder="أدخل رقم الطالب">
+                    </div>
+                    <div class="form-group">
+                        <label for="studentPassword">الرقم السري:</label>
+                        <input type="password" id="studentPassword" required placeholder="أدخل الرقم السري">
+                    </div>
+                    <button type="submit" class="btn btn-primary">دخول</button>
+                    <div id="loginError" class="error-message"></div>
+                </form>
+            </div>
+
+            <!-- مسؤول تسجيل -->
+            <div id="adminTab" class="tab-content">
+                <form onsubmit="adminLogin(event)">
+                    <div class="form-group">
+                        <label for="adminPassword">كلمة المرور:</label>
+                        <input type="password" id="adminPassword" required placeholder="أدخل كلمة المرور">
+                    </div>
+                    <button type="submit" class="btn btn-primary">دخول</button>
+                    <div id="adminLoginError" class="error-message"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- لوحة الطالب -->
+    <div id="studentDashboard" class="container">
+        <div class="card">
+            <div class="header-with-logout">
+                <h2>درجاتي</h2>
+                <button class="btn btn-logout" onclick="logout()">تسجيل خروج</button>
+            </div>
+            <div id="studentInfo" class="student-info"></div>
+            <div id="gradesDisplay" class="grades-table"></div>
+        </div>
+    </div>
+
+    <!-- لوحة المسؤول -->
+    <div id="adminDashboard" class="container">
+        <div class="card">
+            <div class="header-with-logout">
+                <h2>لوحة التحكم - إدارة الدرجات</h2>
+                <button class="btn btn-logout" onclick="logout()">تسجيل خروج</button>
+            </div>
+
+            <!-- رفع ملف -->
+            <div class="admin-section">
+                <h3>رفع ملف الدرجات</h3>
+                <div class="form-group">
+                    <label for="excelFile">اختر ملف Excel:</label>
+                    <input type="file" id="excelFile" accept=".xlsx,.xls,.csv" required>
+                </div>
+                <button class="btn btn-primary" onclick="uploadExcelFile()">رفع الملف</button>
+                <div id="uploadStatus" class="status-message"></div>
+            </div>
+
+            <!-- عرض البيانات -->
+            <div class="admin-section">
+                <h3>الطلاب والدرجات الحالية</h3>
+                <div id="adminDataDisplay"></div>
+                <div class="button-group">
+                    <button class="btn btn-secondary" onclick="exportData()">تحميل النسخة الاحتياطية</button>
+                    <button class="btn btn-danger" onclick="deleteAllData()">حذف البيانات</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- مساعد Excel -->
+    <script src="https://unpkg.com/xlsx@latest/dist/xlsx.full.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
