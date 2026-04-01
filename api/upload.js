@@ -76,8 +76,16 @@ export default async function handler(req, res) {
   try {
     // Check if Firebase is initialized
     if (!admin.apps || admin.apps.length === 0) {
-      console.error('Firebase not initialized');
-      return res.status(500).json({ error: 'Firebase not initialized' });
+      console.error('❌ Firebase not initialized in upload');
+      return res.status(500).json({ 
+        error: 'Firebase not initialized',
+        message: 'Check VERCEL Environment Variables - FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL'
+      });
+    }
+
+    const db = admin.database();
+    if (!db) {
+      throw new Error('Database reference is null');
     }
 
     const bb = busboy({ headers: req.headers });

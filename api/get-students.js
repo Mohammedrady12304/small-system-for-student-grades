@@ -16,23 +16,37 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Check if Firebase is initialized
     if (!admin.apps || admin.apps.length === 0) {
-      console.error('Firebase not initialized');
-      return res.status(500).json({ error: 'Firebase not initialized' });
+      console.error('❌ Firebase not initialized');
+      return res.status(500).json({ 
+        error: 'Firebase not initialized',
+        message: 'Check environment variables on Vercel:'
+      });
     }
 
     const db = admin.database();
+    if (!db) {
+      throw new Error('Database reference is null');
+    }
+
     const studentsRef = db.ref('students');
-    
     const snapshot = await studentsRef.get();
-    const students = snapshot.val() || {};
+    const students = snapshot.val();
+    
+    if (!students) {
+      return res.status(200).json([]);
+    }
     
     // Convert object to array if needed
     const studentArray = Array.isArray(students) ? students : Object.values(students);
     
     res.status(200).json(studentArray);
   } catch (error) {
-    console.error('Error loading students:', error);
-    res.status(500).json({ error: error.message });
+    console.error('❌ Error in get-students:', error);
+    res.status(500).json({ 
+      error: 'Failed to load students',
+      details: error.message 
+    });
   }
 }

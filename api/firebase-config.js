@@ -1,37 +1,49 @@
 import admin from 'firebase-admin';
 
-// Initialize Firebase
-const serviceAccount = {
-  project_id: process.env.FIREBASE_PROJECT_ID,
-  private_key: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
-  client_email: process.env.FIREBASE_CLIENT_EMAIL,
-};
+// Get environment variables
+const projectId = process.env.FIREBASE_PROJECT_ID;
+const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
 
-console.log('Firebase Config Check:', {
-  project_id: serviceAccount.project_id ? 'Set ✓' : 'Missing ✗',
-  private_key: serviceAccount.private_key ? `Set ✓ (${serviceAccount.private_key.length} chars)` : 'Missing ✗',
-  client_email: serviceAccount.client_email ? 'Set ✓' : 'Missing ✗'
+console.log('🔍 Firebase Environment Check:', {
+  FIREBASE_PROJECT_ID: projectId ? '✓' : '✗ MISSING',
+  FIREBASE_PRIVATE_KEY: privateKey ? `✓ (${privateKey.length} chars)` : '✗ MISSING',
+  FIREBASE_CLIENT_EMAIL: clientEmail ? '✓' : '✗ MISSING'
 });
 
-// Debug
-if (!serviceAccount.project_id || !serviceAccount.private_key || !serviceAccount.client_email) {
-  console.warn('⚠️ Firebase environment variables not fully set');
+// Validate environment variables
+if (!projectId || !privateKey || !clientEmail) {
+  console.error('❌ CRITICAL: Missing Firebase environment variables!');
+  console.error('Set these in Vercel Project Settings:');
+  console.error('  - FIREBASE_PROJECT_ID');
+  console.error('  - FIREBASE_PRIVATE_KEY');
+  console.error('  - FIREBASE_CLIENT_EMAIL');
 }
 
+// Initialize Firebase
 if (!admin.apps.length) {
   try {
+    const serviceAccount = {
+      type: 'service_account',
+      project_id: projectId,
+      private_key_id: 'key-id',
+      private_key: (privateKey || '').replace(/\\n/g, '\n'),
+      client_email: clientEmail,
+      client_id: 'client-id',
+      auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+      token_uri: 'https://oauth2.googleapis.com/token',
+      auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs'
+    };
+
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
-      databaseURL: `https://${process.env.FIREBASE_PROJECT_ID}.firebaseio.com`
+      databaseURL: `https://${projectId}.firebaseio.com`
     });
+    
     console.log('✅ Firebase initialized successfully');
   } catch (error) {
-    console.error('❌ Firebase initialization error:', error.message);
-    console.error('Service Account:', {
-      project_id: serviceAccount.project_id?.substring(0, 10),
-      private_key: serviceAccount.private_key?.substring(0, 20) + '...',
-      client_email: serviceAccount.client_email?.substring(0, 20) + '...'
-    });
+    console.error('❌ Firebase initialization ERROR:', error.message);
+    throw new Error(`Firebase Init Failed: ${error.message}`);
   }
 }
 
