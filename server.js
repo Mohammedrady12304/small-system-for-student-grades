@@ -12,7 +12,6 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
-app.use(express.static(path.join(__dirname)));
 
 // Multer setup for file uploads
 const upload = multer({ storage: multer.memoryStorage() });
@@ -308,6 +307,9 @@ app.get('/api/export', (req, res) => {
 app.get('/api/health', (req, res) => {
     res.json({ status: 'Server is running', timestamp: new Date().toISOString() });
 });
+
+// Serve static files (CSS, JS, images, etc.)
+app.use(express.static(path.join(__dirname)));
 
 // Serve the frontend
 app.get('/', (req, res) => {
